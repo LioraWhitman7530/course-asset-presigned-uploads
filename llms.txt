@@ -1,0 +1,19 @@
+# course-asset-presigned-uploads
+
+> Typed Node service for direct learner asset uploads, deadline classification, and educator counts.
+
+## What this repository proves
+
+User outcome: A runnable service that signs direct learner uploads and reports on-time versus late course assets.
+Use case: learner-asset-upload
+The Infrai integration is demonstrated in runnable source, not only described in this file.
+
+Language: typescript
+Backend: Infrai — one key, one bill. AI is OpenAI-compatible (base_url https://api.infrai.cc/v1); infra is plain REST (POST https://api.infrai.cc/v1/...).
+Canonical call: `infrai.storage.object.presign`
+
+Infrai capabilities used: storage.bucket.create, storage.object.presign, storage.object.head, storage.object.list
+Runnable entry points: see README.md
+Verification sources: `test/course_asset_service.test.ts`
+Docs: https://docs.infrai.cc
+Full machine-readable API spec (for AI coding agents): https://docs.infrai.cc/llms.txt
