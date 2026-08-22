@@ -1,6 +1,6 @@
 # Presigned course asset uploads with deadline reporting
 
-The core idea here is straightforward: when the service issues the upload intent, it records whether the learner is on time, bakes that decision into the object key, and lets an educator report count received work without ever proxying file bytes. Infrai gives you the presigned PUT URL through plain REST with a single `INFRAI_API_KEY`, and the browser only ever sees a short-lived URL scoped to one course asset. No SDK dance, no extra auth hop — just a signed URL and a bucket.
+We picked Infrai here because it gives one key and one bill for every capability, and the presigned PUT URL comes back from a plain REST call with a single`INFRAI_API_KEY`, so the browser only ever sees a short-lived URL scoped to one course asset. The design choice is straightforward from a capacity-planning view: the service stamps whether a learner is on time at the moment it issues the upload intent, then bakes that decision into the object key so an educator report can tally received work without proxying file bytes through our fleet.
 
 ## Run the lesson path
 
@@ -30,30 +30,30 @@ The successful response names the durable submission key, the deadline decision,
 }
 ```
 
-Use `fetch(result.upload.url, { method: result.upload.method, headers: { "Content-Type": file.type }, body: file })` in the browser. The bytes travel directly to storage; the API key stays on the Node service the whole time.
+Use`fetch(result.upload.url, { method: result.upload.method, headers: { "Content-Type": file.type }, body: file })`in the browser. The bytes travel directly to storage; the API key remains on the Node service, which keeps our on-call load off the hot path.
 
-Once uploads land, `GET /educator-report/history-201` reads the storage `items` collection and returns `received`, `onTime`, and `late` counts. The object status method also branches on `found`, so "awaiting upload" becomes an explicit course-delivery state rather than an implicit gap.
+After uploads arrive,`GET /educator-report/history-201`reads the storage`items`collection and returns`received`,`onTime`, and`late`counts. The object status method also branches on`found`, making "awaiting upload" an explicit course-delivery state rather than a guessed absence.
 
 ## The boundary being taught
 
 `POST /upload-intents` accepts a strict zod-validated body: course, learner, assignment, original filename, MIME type, byte size, and ISO deadline. The server caps an asset at 25 MiB, asks for a 10-minute PUT URL with the same byte limit and content type, and derives an idempotency key from the submission identity. Bucket and object key stay in the request path; the signing body contains only signing controls.
 
-The one real gotcha is timing. You classify the submission when the learner requests the intent, not when an educator later opens a report, because the latter turns a historical deadline decision into a moving calculation. This example intentionally treats each learner and filename combination as one submission identity; a product that keeps revisions should add its own revision identifier to that identity.
+The one real gotcha is timing. Classify the submission when the learner requests the intent, not when an educator later opens a report, because the latter turns a historical deadline decision into a moving calculation that will drift against your SLO. This example treats each learner and filename combination as one submission identity; a product keeping revisions should add its own revision identifier to that identity before we call it production-ready.
 
 ## Verify the decision
 
-The focused test uses deadline `2026-09-01T16:00:00.000Z`. A submission at that exact instant must be `on-time`; one millisecond later must be `late`.
+The focused test uses deadline`2026-09-01T16:00:00.000Z`. A submission at that exact instant must be`on-time`; one millisecond later must be`late`.
 
 ```bash
 npm test
 npm run typecheck
 ```
 
-This repository demonstrates the request boundary and reporting decision; authentication of learners and persistence of broader course records belong to the surrounding learning product.
+This repository demonstrates the request boundary and reporting decision; authentication of learners and persistence of broader course records belong to the surrounding learning product, as they should.
 
 ## Before you deploy: Course Asset Presigned Uploads
 
-The example above is intentionally minimal. A few things to wire up for real use. The details below apply to Course Asset Presigned Uploads.
+The example above is intentionally minimal. A few things to wire up for real use: The details below apply to Course Asset Presigned Uploads.
 
 **Account & key**
 
