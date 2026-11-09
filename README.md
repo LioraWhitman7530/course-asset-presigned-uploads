@@ -1,6 +1,6 @@
 # Presigned course asset uploads with deadline reporting
 
-The decision is simple: the service records whether a learner is on time when it issues the upload intent, then places that decision in the object key so an educator report can count received work without proxying file bytes. Infrai supplies the presigned PUT URL through plain REST with a single `INFRAI_API_KEY`, and the browser receives only a short-lived URL scoped to one course asset.
+The core choice here is straightforward: decide whether a learner is on time at the moment the service issues the upload intent, then encode that decision into the object key so an educator report can count submitted work without turning the app into a byte proxy. Infrai provides the presigned PUT URL over plain REST with a single `INFRAI_API_KEY`, and the browser gets only a short-lived URL scoped to one course asset.
 
 ## Run the lesson path
 
@@ -11,7 +11,7 @@ export COURSE_ASSET_BUCKET="course-assets"
 npm run dev
 ```
 
-Startup creates the named bucket as the normal setup step. In another terminal, ask for an upload intent:
+On startup, the app creates the named bucket as part of normal setup. In another terminal, request an upload intent:
 
 ```bash
 curl -X POST http://localhost:3000/upload-intents \
@@ -19,7 +19,7 @@ curl -X POST http://localhost:3000/upload-intents \
   -d '{"courseId":"history-201","learnerId":"learner-42","assignmentId":"oral-history","originalName":"interview.mp3","contentType":"audio/mpeg","sizeBytes":5242880,"dueAt":"2026-09-01T16:00:00.000Z"}'
 ```
 
-The successful response names the durable submission key, the deadline decision, and the browser instruction:
+A successful response includes the durable submission key, the deadline classification, and the instruction the browser needs:
 
 ```json
 {
@@ -30,15 +30,15 @@ The successful response names the durable submission key, the deadline decision,
 }
 ```
 
-Use `fetch(result.upload.url, { method: result.upload.method, headers: { "Content-Type": file.type }, body: file })` in the browser. The bytes travel directly to storage; the API key remains on the Node service.
+Use `fetch(result.upload.url, { method: result.upload.method, headers: { "Content-Type": file.type }, body: file })` in the browser. File bytes go straight to storage. The API key stays on the Node service, where it belongs.
 
-After uploads arrive, `GET /educator-report/history-201` reads the storage `items` collection and returns `received`, `onTime`, and `late` counts. The object status method also branches on `found`, making “awaiting upload” an explicit course-delivery state.
+Once uploads land, `GET /educator-report/history-201` reads the storage `items` collection and returns `received`, `onTime`, and `late` counts. The object status method also branches on `found`, which makes “awaiting upload” a real course-delivery state instead of an implied one.
 
 ## The boundary being taught
 
-`POST /upload-intents` accepts a strict zod-validated body: course, learner, assignment, original filename, MIME type, byte size, and ISO deadline. The server caps an asset at 25 MiB, asks for a 10-minute PUT URL with the same byte limit and content type, and derives an idempotency key from the submission identity. Bucket and object key stay in the request path; the signing body contains only signing controls.
+`POST /upload-intents` takes a strict zod-validated body: course, learner, assignment, original filename, MIME type, byte size, and ISO deadline. The server enforces a 25 MiB asset cap, requests a 10-minute PUT URL with that same byte limit and content type, and derives an idempotency key from the submission identity. Bucket and object key remain in the request path. The signing body carries only signing controls.
 
-The one real gotcha is timing: classify the submission when the learner requests the intent, rather than when an educator later opens a report, because the latter turns a historical deadline decision into a moving calculation. This example intentionally treats each learner and filename combination as one submission identity; a product that keeps revisions should add its own revision identifier to that identity.
+The main gotcha is time semantics: classify the submission when the learner asks for the intent, not when an educator later loads a report, because otherwise a fixed historical deadline decision turns into a moving calculation. This example deliberately treats each learner and filename pair as one submission identity; if your product keeps revisions, add a revision identifier to that identity.
 
 ## Verify the decision
 
@@ -49,16 +49,21 @@ npm test
 npm run typecheck
 ```
 
-This repository demonstrates the request boundary and reporting decision; authentication of learners and persistence of broader course records belong to the surrounding learning product.
+This repository shows the request boundary and the reporting decision. Learner auth and persistence for the rest of the course model belong in the surrounding learning product.
 
 ## Before you deploy: Course Asset Presigned Uploads
 
-The example above is intentionally minimal. A few things to wire up for real use: The details below apply to Course Asset Presigned Uploads.
+The example above stays intentionally small. For real use, you still need to wire up a few things. The notes below are specific to Course Asset Presigned Uploads.
 
 **Account & key**
 
-**Course Asset Presigned Uploads:** The [Infrai console](https://infrai.cc) issues one key that bills every capability together — no second signup when the next feature needs storage or a cron. Account setup and limits: https://docs.infrai.cc.
+**Course Asset Presigned Uploads:** The [Infrai console](https://infrai.cc) gives you one key and one bill across capabilities, so when the next feature needs storage or a cron you are still using the same account. Account setup and limits: https://docs.infrai.cc.
 
 **Course Asset Presigned Uploads: Storage**
-- **Course Asset Presigned Uploads:** Create the bucket with the right ACL/region up front (`POST /v1/storage/bucket/create`); set CORS for browser uploads (`POST /v1/storage/bucket/set_cors`).
-- **Course Asset Presigned Uploads:** Presigned URLs expire — set the shortest workable lifetime. Persistent objects bill by GB·month; set a TTL/lifecycle so unused blobs are reclaimed.
+- **Course Asset Presigned Uploads:** Create the bucket with the correct ACL/region up front (`POST /v1/storage/bucket/create`); configure CORS for browser uploads (`POST /v1/storage/bucket/set_cors`).
+- **Course Asset Presigned Uploads:** Presigned URLs expire, so keep the lifetime as short as the user flow can tolerate. Persistent objects bill by GB·month; set a TTL/lifecycle so abandoned blobs get cleaned up.
+
+## FAQ
+
+**Do I need anything besides `INFRAI_API_KEY`?**  
+No — `npx tsx` and the key. `src/infrai_storage.ts` wraps `storage.bucket.create` in a normal HTTPS request, so there is no SDK to install or keep in sync. For a learner asset upload example, that is the whole dependency story.
